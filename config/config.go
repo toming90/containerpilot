@@ -11,14 +11,17 @@ import (
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/joyent/containerpilot/backends"
-	"github.com/joyent/containerpilot/commands"
-	"github.com/joyent/containerpilot/coprocesses"
-	"github.com/joyent/containerpilot/discovery"
-	"github.com/joyent/containerpilot/services"
-	"github.com/joyent/containerpilot/tasks"
-	"github.com/joyent/containerpilot/telemetry"
-	"github.com/joyent/containerpilot/utils"
+	"github.com/toming90/containerpilot/backends"
+	"github.com/toming90/containerpilot/commands"
+	"github.com/toming90/containerpilot/coprocesses"
+	"github.com/toming90/containerpilot/discovery"
+	"github.com/toming90/containerpilot/services"
+	"github.com/toming90/containerpilot/tasks"
+	"github.com/toming90/containerpilot/telemetry"
+	"github.com/toming90/containerpilot/utils"
+
+	//CUSTOMIZE
+	"github.com/toming90/containerpilot/storage"
 )
 
 type rawConfig struct {
@@ -33,6 +36,7 @@ type rawConfig struct {
 	backendsConfig    []interface{}
 	tasksConfig       []interface{}
 	telemetryConfig   interface{}
+	StorageConfig     []interface{}
 }
 
 // Config contains the parsed config elements
@@ -48,6 +52,7 @@ type Config struct {
 	Backends       []*backends.Backend
 	Tasks          []*tasks.Task
 	Telemetry      *telemetry.Telemetry
+	Storage        []*custom.Storage
 }
 
 const (
