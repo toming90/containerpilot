@@ -12,8 +12,8 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/joyent/containerpilot/discovery"
-	"github.com/joyent/containerpilot/utils"
+	"github.com/toming90/containerpilot/discovery"
+	"github.com/toming90/containerpilot/utils"
 )
 
 const (
