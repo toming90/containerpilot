@@ -8,8 +8,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	consul "github.com/hashicorp/consul/api"
-	"github.com/joyent/containerpilot/discovery"
-	"github.com/joyent/containerpilot/utils"
+	"github.com/toming90/containerpilot/discovery"
+	"github.com/toming90/containerpilot/utils"
 )
 
 func init() {
