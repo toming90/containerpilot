@@ -12,7 +12,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/toming90/containerpilot/discovery"
+	"github.com/toming90/containerpilot/discovery/consul"
 	"github.com/toming90/containerpilot/utils"
 )
 
@@ -37,7 +37,7 @@ type Storage struct {
 	OnChangeExec    interface{} `mapstructure:"onChange"`
 	onChangeCmd     *exec.Cmd
 	OnChangePostUrl string `mapstructure:"onChangePostUrl"`
-	consul          discovery.Consul
+	consul          consul.Consul
 }
 
 func NewStorage(raw json.RawMessage, consulCli discovery.Consul) ([]*Storage, error) {
