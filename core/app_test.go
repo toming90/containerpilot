@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joyent/containerpilot/commands"
+	"github.com/toming90/containerpilot/commands"
 )
 
 // ------------------------------------------

@@ -5,9 +5,9 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/joyent/containerpilot/commands"
-	"github.com/joyent/containerpilot/discovery"
-	"github.com/joyent/containerpilot/utils"
+	"github.com/toming90/containerpilot/commands"
+	"github.com/toming90/containerpilot/discovery"
+	"github.com/toming90/containerpilot/utils"
 )
 
 // Backend represents a command to execute when another application changes

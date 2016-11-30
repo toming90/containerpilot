@@ -1,15 +1,15 @@
-package main // import "github.com/joyent/containerpilot"
+package main // import "github.com/toming90/containerpilot"
 
 import (
 	"runtime"
 
-	"github.com/joyent/containerpilot/core"
+	"github.com/toming90/containerpilot/core"
 
 	log "github.com/Sirupsen/logrus"
 
 	// Import backends so that they initialize
-	_ "github.com/joyent/containerpilot/discovery/consul"
-	_ "github.com/joyent/containerpilot/discovery/etcd"
+	_ "github.com/toming90/containerpilot/discovery/consul"
+	_ "github.com/toming90/containerpilot/discovery/etcd"
 )
 
 // Main executes the containerpilot CLI

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/joyent/containerpilot/commands"
+	"github.com/toming90/containerpilot/commands"
 )
 
 func TestHealthCheck(t *testing.T) {

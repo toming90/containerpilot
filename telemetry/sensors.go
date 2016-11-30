@@ -7,9 +7,9 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/joyent/containerpilot/commands"
-	"github.com/joyent/containerpilot/utils"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/toming90/containerpilot/commands"
+	"github.com/toming90/containerpilot/utils"
 )
 
 // A Sensor is a single measurement of the application.

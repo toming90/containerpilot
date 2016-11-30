@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joyent/containerpilot/commands"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/toming90/containerpilot/commands"
 )
 
 /*

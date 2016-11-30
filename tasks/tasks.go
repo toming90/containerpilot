@@ -5,8 +5,8 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/joyent/containerpilot/commands"
-	"github.com/joyent/containerpilot/utils"
+	"github.com/toming90/containerpilot/commands"
+	"github.com/toming90/containerpilot/utils"
 )
 
 // Task configures tasks that run periodically
