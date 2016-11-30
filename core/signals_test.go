@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joyent/containerpilot/commands"
-	"github.com/joyent/containerpilot/discovery"
-	"github.com/joyent/containerpilot/discovery/consul"
-	"github.com/joyent/containerpilot/services"
+	"github.com/toming90/containerpilot/commands"
+	"github.com/toming90/containerpilot/discovery"
+	"github.com/toming90/containerpilot/discovery/consul"
+	"github.com/toming90/containerpilot/services"
 )
 
 // ------------------------------------------

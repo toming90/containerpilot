@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/joyent/containerpilot/utils"
+	"github.com/toming90/containerpilot/utils"
 )
 
 // ParseArgs parses the executable and its arguments from supported

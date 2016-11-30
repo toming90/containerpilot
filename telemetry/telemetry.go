@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/joyent/containerpilot/utils"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/toming90/containerpilot/utils"
 )
 
 // Telemetry represents the service to advertise for finding the metrics

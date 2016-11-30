@@ -40,15 +40,17 @@ type Storage struct {
 	consul          consul.Consul
 }
 
-func NewStorage(raw json.RawMessage, consulCli discovery.Consul) ([]*Storage, error) {
+func NewStorage(raw []interface{}, consulCli consul.Consul) ([]*Storage, error) {
 	if raw == nil {
 		return []*Storage{}, nil
 	}
-	storage := make([]*Storage, 0)
-	if err := json.Unmarshal(raw, &storage); err != nil {
+
+	var storages []*Storage
+	if err := utils.DecodeRaw(raw, &storages); err != nil {
 		return nil, fmt.Errorf("storage configuration error: %v", err)
 	}
-	for _, s := range storage {
+	for _, s := range storages {
+
 		if s.Path == "" {
 			return nil, fmt.Errorf("storage must have a `path`")
 		}
@@ -56,6 +58,9 @@ func NewStorage(raw json.RawMessage, consulCli discovery.Consul) ([]*Storage, er
 			s.Path = workspacePrefix + s.Path
 		} else {
 			s.Path = workspacePrefix + SLASH + s.Path
+		}
+		if s.OnChangeExec == nil {
+			return nil, fmt.Errorf("`onChange` is required in kvStorge %s", s.Path)
 		}
 
 		cmd, err := utils.ParseCommandArgs(s.OnChangeExec)

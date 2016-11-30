@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joyent/containerpilot/discovery"
+	"github.com/toming90/containerpilot/discovery"
 )
 
 func setupConsul(serviceName string) (*Consul, *discovery.ServiceDefinition) {
