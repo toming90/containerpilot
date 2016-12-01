@@ -21,6 +21,7 @@ import (
 	"github.com/toming90/containerpilot/utils"
 
 	//CUSTOMIZE
+	"github.com/toming90/containerpilot/discovery/consul"
 	"github.com/toming90/containerpilot/storage"
 )
 
@@ -36,7 +37,7 @@ type rawConfig struct {
 	backendsConfig    []interface{}
 	tasksConfig       []interface{}
 	telemetryConfig   interface{}
-	StorageConfig     []interface{}
+	storagesConfig    []interface{}
 }
 
 // Config contains the parsed config elements
@@ -52,7 +53,7 @@ type Config struct {
 	Backends       []*backends.Backend
 	Tasks          []*tasks.Task
 	Telemetry      *telemetry.Telemetry
-	Storage        []*custom.Storage
+	Storages       []*storage.Storage
 }
 
 const (
@@ -167,6 +168,14 @@ func (cfg *rawConfig) parseTasks() ([]*tasks.Task, error) {
 	return tasks, nil
 }
 
+func (cfg *rawConfig) parseStorages(consulCli consul.Consul) ([]*storage.Storage, error) {
+	storages, err := storage.NewStorages(cfg.storagesConfig, consulCli)
+	if err != nil {
+		return nil, err
+	}
+	return storages, nil
+}
+
 // ParseConfig parses a raw config flag
 func ParseConfig(configFlag string) (*Config, error) {
 	if configFlag == "" {
@@ -244,6 +253,14 @@ func ParseConfig(configFlag string) (*Config, error) {
 		return nil, fmt.Errorf("Unable to parse backends: %v", err)
 	}
 	cfg.Backends = backends
+
+	// CUSTOMIZE - parse storage from json to struct - and parse consul cli to storage
+	consulCli := consul.NewConsulConfig(cfg.Consul)
+	storages, err := raw.parseStorages(consulCli)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to parse storages: %v", err)
+	}
+	cfg.Storages = storages
 
 	telemetry, err := raw.parseTelemetry()
 	if err != nil {
