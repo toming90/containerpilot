@@ -1,4 +1,4 @@
-package custom
+package storage
 
 import (
 	"bytes"
@@ -7,11 +7,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"os/exec"
+	//	"os/exec"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/toming90/containerpilot/commands"
 	"github.com/toming90/containerpilot/discovery/consul"
 	"github.com/toming90/containerpilot/utils"
 )
@@ -35,12 +36,13 @@ type Storage struct {
 	Path            string      `mapstructure:"path"`
 	Poll            int         `mapstructure:"poll"` // time in seconds
 	OnChangeExec    interface{} `mapstructure:"onChange"`
-	onChangeCmd     *exec.Cmd
+	onChangeCmd     *commands.Command
+	Timeout         string `mapstructure:"timeout"`
 	OnChangePostUrl string `mapstructure:"onChangePostUrl"`
 	consul          consul.Consul
 }
 
-func NewStorage(raw []interface{}, consulCli consul.Consul) ([]*Storage, error) {
+func NewStorages(raw []interface{}, consulCli consul.Consul) ([]*Storage, error) {
 	if raw == nil {
 		return []*Storage{}, nil
 	}
@@ -63,11 +65,17 @@ func NewStorage(raw []interface{}, consulCli consul.Consul) ([]*Storage, error) 
 			return nil, fmt.Errorf("`onChange` is required in kvStorge %s", s.Path)
 		}
 
-		cmd, err := utils.ParseCommandArgs(s.OnChangeExec)
+		cmd, err := commands.NewCommand(s.OnChangeExec, s.Timeout)
 		if err != nil {
-			return nil, fmt.Errorf("Could not parse `onChange` in storage %s: %s",
+			return nil, fmt.Errorf("Could not parse `onChange` in backend %s: %s",
 				s.Path, err)
 		}
+
+		//		cmd, err := utils.ParseCommandArgs(s.OnChangeExec)
+		//		if err != nil {
+		//			return nil, fmt.Errorf("Could not parse `onChange` in storage %s: %s",
+		//				s.Path, err)
+		//		}
 
 		if s.Poll < 1 {
 			return nil, fmt.Errorf("`poll` must be > 0 in storage %s",
@@ -76,7 +84,7 @@ func NewStorage(raw []interface{}, consulCli consul.Consul) ([]*Storage, error) 
 		s.onChangeCmd = cmd
 		s.consul = consulCli
 	}
-	return storage, nil
+	return storages, nil
 }
 
 // PollTime implements Pollable for Storage
@@ -387,14 +395,11 @@ func PostKeyValuePairsOnChange(url string, chgs *KeyValueChanges) {
 }
 
 // OnChange runs the backend's onChange command, returning the results
-func (s *Storage) OnChange() (int, error) {
-	defer func() {
-		// reset command object because it can't be reused
-		s.onChangeCmd = utils.ArgsToCmd(s.onChangeCmd.Args)
-	}()
+func (s *Storage) OnChange() error {
 
-	exitCode, err := utils.RunWithFields(s.onChangeCmd, log.Fields{"process": "OnChange", "storage": s.Path})
-	return exitCode, err
+	return commands.RunWithTimeout(s.onChangeCmd, log.Fields{
+		"process": "onChange", "Path": s.Path})
+
 }
 
 //func unmarshalExtraConfig(data []byte) (*ExtraConfig, error) {
