@@ -12,6 +12,10 @@ import (
 	_ "github.com/toming90/containerpilot/discovery/etcd"
 )
 
+func init() {
+	log.SetLevel(log.DebugLevel)
+}
+
 // Main executes the containerpilot CLI
 func main() {
 	// make sure we use only a single CPU so as not to cause

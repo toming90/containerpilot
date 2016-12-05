@@ -206,6 +206,7 @@ func ParseConfig(configFlag string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	// Delete discovery backend keys
 	for _, backend := range discovery.GetBackends() {
 		delete(configMap, backend)
