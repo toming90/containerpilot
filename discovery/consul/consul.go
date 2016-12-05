@@ -13,6 +13,7 @@ import (
 )
 
 func init() {
+
 	discovery.RegisterBackend("consul", ConfigHook)
 }
 
@@ -21,6 +22,7 @@ type Consul struct{ consul.Client }
 
 // ConfigHook is the hook to register with the Consul backend
 func ConfigHook(raw interface{}) (discovery.ServiceBackend, error) {
+	fmt.Printf("ConfigHook: raw is %v", raw)
 	return NewConsulConfig(raw)
 }
 
