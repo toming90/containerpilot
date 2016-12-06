@@ -19,11 +19,12 @@ import (
 	"github.com/toming90/containerpilot/telemetry"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/toming90/containerpilot/storage"
 )
 
 var (
 	// Version is the version for this build, set at build time via LDFLAGS
-	Version string
+	Version string = "0.0.6-dev"
 	// GitHash is the short-form commit hash of this build, set at build time
 	GitHash string
 )
@@ -47,6 +48,7 @@ type App struct {
 	signalLock     *sync.RWMutex
 	paused         bool
 	ConfigFlag     string
+	Storages       []*storage.Storage
 }
 
 // EmptyApp creates an empty application
@@ -64,6 +66,7 @@ func LoadApp() (*App, error) {
 	var versionFlag bool
 
 	if !flag.Parsed() {
+
 		flag.StringVar(&configFlag, "config", "",
 			"JSON config or file:// path to JSON config file.")
 		flag.BoolVar(&versionFlag, "version", false, "Show version identifier and quit.")
@@ -78,6 +81,7 @@ func LoadApp() (*App, error) {
 	}
 
 	os.Setenv("CONTAINERPILOT_PID", fmt.Sprintf("%v", os.Getpid()))
+
 	app, err := NewApp(configFlag)
 	if err != nil {
 		return nil, err
@@ -88,6 +92,7 @@ func LoadApp() (*App, error) {
 // NewApp creates a new App from the config
 func NewApp(configFlag string) (*App, error) {
 	a := EmptyApp()
+
 	cfg, err := config.ParseConfig(configFlag)
 	if err != nil {
 		return nil, err
@@ -95,6 +100,7 @@ func NewApp(configFlag string) (*App, error) {
 	if err = cfg.InitLogging(); err != nil {
 		return nil, err
 	}
+
 	a.PreStartCmd = cfg.PreStart
 	a.PreStopCmd = cfg.PreStop
 	a.PostStopCmd = cfg.PostStop
@@ -106,6 +112,7 @@ func NewApp(configFlag string) (*App, error) {
 	a.Coprocesses = cfg.Coprocesses
 	a.Telemetry = cfg.Telemetry
 	a.ConfigFlag = configFlag
+	a.Storages = cfg.Storages
 
 	// set an environment variable for each service IP address so that
 	// forked processes have access to this information
@@ -287,6 +294,7 @@ func (a *App) load(newApp *App) {
 	a.Services = newApp.Services
 	a.Backends = newApp.Backends
 	a.StopTimeout = newApp.StopTimeout
+	a.Storages = newApp.Storages
 	if a.Telemetry != nil {
 		a.Telemetry.Shutdown()
 	}
@@ -315,6 +323,12 @@ func (a *App) handlePolling() {
 	for _, service := range a.Services {
 		quit = append(quit, a.poll(service))
 	}
+
+	// CUSTOMIZE - polling storage change
+	for _, storage := range a.Storages {
+		quit = append(quit, a.poll(storage))
+	}
+
 	if a.Telemetry != nil {
 		for _, sensor := range a.Telemetry.Sensors {
 			quit = append(quit, a.poll(sensor))

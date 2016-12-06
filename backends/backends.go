@@ -31,6 +31,7 @@ func NewBackends(raw []interface{}, disc discovery.ServiceBackend) ([]*Backend, 
 	if err := utils.DecodeRaw(raw, &backends); err != nil {
 		return nil, fmt.Errorf("Backend configuration error: %v", err)
 	}
+	log.Printf("\nafter decode backends are: %v\n", *backends[0])
 	for _, b := range backends {
 		if err := utils.ValidateServiceName(b.Name); err != nil {
 			return nil, err

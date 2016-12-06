@@ -1,0 +1,48 @@
+{
+	"consul": "{{.NOMAD_IP_cobalt}}:8500",
+	"stopTimeout": 5,
+	"services": [
+		{
+			"name": "{{.COBALT_SERVICE_NAME}}",
+			"port": 3000,
+			"health": "echo hello",
+			"poll": 10,
+			"ttl": 25,
+			"interfaces": [
+				"en0"
+			],
+			"tags": [
+				"NOMAD-ALLOC-ID--{{.NOMAD_ALLOC_ID}}"
+			]
+		}
+	],
+	"backends": [
+    {
+      "name": "greeting-service",
+      "poll": 8,
+      "onChange": "sh /opt/containerpilot/reload-nginx.sh"
+    },
+    {
+      "name": "greeting-service-test",
+      "poll": 8,
+      "onChange": "sh /opt/containerpilot/reload-nginx.sh"
+    }
+  ],
+	"kvStorages": [
+    {
+      "path": "{{.COBALT_WS}}/greeting-service/post/endpoint",
+      "onChangePostUrl": "http://localhost:8080/reloadKeyValue",
+      "poll": 9
+    },
+    {
+      "path": "{{.COBALT_WS}}/greeting-service/greeting/reload/message",
+      "onChange": "sh /opt/containerpilot/reload-app.sh",
+      "poll": 9
+    },
+    {
+      "path": "/cobalt/cluster/status",
+      "onChange": "sh /opt/containerpilot/shutdown.sh",
+      "poll": 9
+    }
+  ]
+}

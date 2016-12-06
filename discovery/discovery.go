@@ -9,6 +9,7 @@ type ServiceBackend interface {
 	CheckForUpstreamChanges(backendName string, backendTag string) bool
 	MarkForMaintenance(service *ServiceDefinition)
 	Deregister(service *ServiceDefinition)
+	GetClient() interface{}
 }
 
 // ServiceDefinition is the concrete service structure that is
@@ -30,8 +31,11 @@ var discoveryHooks = map[string]ServiceDiscoveryConfigHook{}
 
 // RegisterBackend registers a service discovery config hook for a config key
 func RegisterBackend(name string, hook ServiceDiscoveryConfigHook) {
-	log.Debugf("Service discovery hook: %s", name)
+	log.Debugf("Service discovery hook: %s\n", name)
+	// map: consul - register function
 	discoveryHooks[name] = hook
+
+	// a list, consul, etcd, etc
 	backends = append(backends, name)
 }
 

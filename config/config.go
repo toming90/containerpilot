@@ -21,7 +21,7 @@ import (
 	"github.com/toming90/containerpilot/utils"
 
 	//CUSTOMIZE
-	"github.com/toming90/containerpilot/discovery/consul"
+	//	"github.com/toming90/containerpilot/discovery/consul"
 	"github.com/toming90/containerpilot/storage"
 )
 
@@ -73,7 +73,6 @@ func parseServiceBackend(rawCfg map[string]interface{}) (discovery.ServiceBacken
 				if err != nil {
 					return nil, err
 				}
-				log.Debugf("parsed service discovery backend: %s", key)
 				discoveryCount++
 			}
 			delete(rawCfg, key)
@@ -109,6 +108,14 @@ func (cfg *rawConfig) parseServices(discoveryService discovery.ServiceBackend) (
 		return nil, err
 	}
 	return services, nil
+}
+
+func (cfg *rawConfig) parseStorages(discoveryService discovery.ServiceBackend) ([]*storage.Storage, error) {
+	storages, err := storage.NewStorages(cfg.storagesConfig, discoveryService)
+	if err != nil {
+		return nil, err
+	}
+	return storages, nil
 }
 
 func (cfg *rawConfig) parseCoprocesses() ([]*coprocesses.Coprocess, error) {
@@ -168,16 +175,10 @@ func (cfg *rawConfig) parseTasks() ([]*tasks.Task, error) {
 	return tasks, nil
 }
 
-func (cfg *rawConfig) parseStorages(consulCli consul.Consul) ([]*storage.Storage, error) {
-	storages, err := storage.NewStorages(cfg.storagesConfig, consulCli)
-	if err != nil {
-		return nil, err
-	}
-	return storages, nil
-}
-
 // ParseConfig parses a raw config flag
 func ParseConfig(configFlag string) (*Config, error) {
+
+	log.Printf("config flag is: %v\n", configFlag)
 	if configFlag == "" {
 		return nil, errors.New("-config flag is required")
 	}
@@ -193,6 +194,8 @@ func ParseConfig(configFlag string) (*Config, error) {
 		data = []byte(configFlag)
 	}
 
+	fmt.Printf("containerpilot config data in json:%v\n", string(data))
+
 	template, err := ApplyTemplate(data)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -202,6 +205,7 @@ func ParseConfig(configFlag string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	discoveryService, err := parseServiceBackend(configMap)
 	if err != nil {
 		return nil, err
@@ -255,9 +259,15 @@ func ParseConfig(configFlag string) (*Config, error) {
 	}
 	cfg.Backends = backends
 
+	//	consulCli := consul.NewConsulConfig(cfg.Consul)
+	//	storages, err := raw.parseStorages(consulCli)
+	//	if err != nil {
+	//		return nil, fmt.Errorf("Unable to parse storages: %v", err)
+	//	}
+	//	cfg.Storages = storages
+
 	// CUSTOMIZE - parse storage from json to struct - and parse consul cli to storage
-	consulCli := consul.NewConsulConfig(cfg.Consul)
-	storages, err := raw.parseStorages(consulCli)
+	storages, err := raw.parseStorages(discoveryService)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to parse storages: %v", err)
 	}
@@ -384,6 +394,7 @@ func decodeConfig(configMap map[string]interface{}, result *rawConfig) error {
 	result.tasksConfig = decodeArray(configMap["tasks"])
 	result.coprocessesConfig = decodeArray(configMap["coprocesses"])
 	result.telemetryConfig = configMap["telemetry"]
+	result.storagesConfig = decodeArray(configMap["kvStorages"])
 
 	delete(configMap, "logging")
 	delete(configMap, "onStart")
@@ -396,6 +407,7 @@ func decodeConfig(configMap map[string]interface{}, result *rawConfig) error {
 	delete(configMap, "tasks")
 	delete(configMap, "coprocesses")
 	delete(configMap, "telemetry")
+	delete(configMap, "kvStorages")
 	var unused []string
 	for key := range configMap {
 		unused = append(unused, key)

@@ -4,150 +4,36 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	//	"io/ioutil"
 	"net/http"
-	"os"
-	//	"os/exec"
+	//	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/toming90/containerpilot/commands"
-	"github.com/toming90/containerpilot/discovery/consul"
+	"github.com/toming90/containerpilot/discovery"
 	"github.com/toming90/containerpilot/utils"
+
+	consulAPI "github.com/hashicorp/consul/api"
 )
 
 const (
-	COBALT_WS = "COBALT_WS"
-	SLASH     = "/"
+	SLASH = "/"
 )
 
-var workspacePrefix string
-
-func init() {
-	workspacePrefix = os.Getenv(COBALT_WS)
-	if workspacePrefix == "" {
-		log.Errorln("Cannot Detect Environment Variable: COBALT_WS")
-		os.Exit(1)
-	}
-}
-
 type Storage struct {
-	Path            string      `mapstructure:"path"`
-	Poll            int         `mapstructure:"poll"` // time in seconds
-	OnChangeExec    interface{} `mapstructure:"onChange"`
-	onChangeCmd     *commands.Command
-	Timeout         string `mapstructure:"timeout"`
-	OnChangePostUrl string `mapstructure:"onChangePostUrl"`
-	consul          consul.Consul
+	Path             string      `mapstructure:"path"`
+	Poll             int         `mapstructure:"poll"` // time in seconds
+	OnChangeExec     interface{} `mapstructure:"onChange"`
+	Timeout          string      `mapstructure:"timeout"`
+	OnChangePostUrl  string      `mapstructure:"onChangePostUrl"`
+	discoveryService discovery.ServiceBackend
+	onChangeCmd      *commands.Command
 }
 
-func NewStorages(raw []interface{}, consulCli consul.Consul) ([]*Storage, error) {
-	if raw == nil {
-		return []*Storage{}, nil
-	}
-
-	var storages []*Storage
-	if err := utils.DecodeRaw(raw, &storages); err != nil {
-		return nil, fmt.Errorf("storage configuration error: %v", err)
-	}
-	for _, s := range storages {
-
-		if s.Path == "" {
-			return nil, fmt.Errorf("storage must have a `path`")
-		}
-		if strings.HasPrefix(s.Path, SLASH) {
-			s.Path = workspacePrefix + s.Path
-		} else {
-			s.Path = workspacePrefix + SLASH + s.Path
-		}
-		if s.OnChangeExec == nil {
-			return nil, fmt.Errorf("`onChange` is required in kvStorge %s", s.Path)
-		}
-
-		cmd, err := commands.NewCommand(s.OnChangeExec, s.Timeout)
-		if err != nil {
-			return nil, fmt.Errorf("Could not parse `onChange` in backend %s: %s",
-				s.Path, err)
-		}
-
-		//		cmd, err := utils.ParseCommandArgs(s.OnChangeExec)
-		//		if err != nil {
-		//			return nil, fmt.Errorf("Could not parse `onChange` in storage %s: %s",
-		//				s.Path, err)
-		//		}
-
-		if s.Poll < 1 {
-			return nil, fmt.Errorf("`poll` must be > 0 in storage %s",
-				s.Path)
-		}
-		s.onChangeCmd = cmd
-		s.consul = consulCli
-	}
-	return storages, nil
-}
-
-// PollTime implements Pollable for Storage
-// It returns the backend's poll interval.
-func (s Storage) PollTime() time.Duration {
-	return time.Duration(s.Poll) * time.Second
-}
-
-// PollAction implements Pollable for Storage.
-// If the values in the discovery service have changed since the last run,
-// we fire the on change handler.
-func (s *Storage) PollAction() {
-	log.Info("PollAction[custom/keystore.go] PollAction: start.")
-	//	if .CheckForUpstreamChanges() {
-	//		b.OnChange()
-	//	}
-	//	storage := pollable.(*StorageConfig) // if we pass a bad type here we crash intentionally
-	//	if storage.CheckForKeyValueChanges() {
-	//		run(storage.onChangeCmd)
-	//	}
-	//	s.discoveryService.
-	if s.CheckForKeyValueChanges(keyValueMaps[s.Path]) && s.onChangeCmd != nil {
-		s.OnChange()
-	}
-
-}
-
-//func (s *StorageConfig) CheckForKeyValueChanges() bool {
-//	return s.discoveryService.CheckForKeyValueChanges(keyValueMaps[s.Path], s)
-//}
-
-// PollStop does nothing in a Storage
-func (b *Storage) PollStop() {
-	// Nothing to do
-}
-
-//ALL THE BELOW ARE CUSTOMIZATION
-
-//type ExtraConfig struct {
-//	Consul   string           `json:"consul,omitempty"`
-//	Storages []*StorageConfig `json:"storage"`
-//}
-
-//type StorageConfig struct {
-//	Path         string          `json:"path"`
-//	Poll         int             `json:"poll"` // time in seconds
-//	OnChangeExec json.RawMessage `json:"onChange,omitempty"`
-//	onChangeCmd  *exec.Cmd
-
-//	OnChangePostUrl string `json:"onChangePostUrl,omitempty"`
-
-//	discoveryService ExtraDiscoveryService
-//}
-
-//type ExtraDiscoveryService interface {
-
-//	//to detect kv pair changes
-//	CheckForKeyValueChanges(map[string]string, *StorageConfig) bool
-
-//	//initial sync kv pairs
-//	InitSyncKeyValues(*StorageConfig)
-//}
-
+// KeyValueChangeUnit stores changes of paths
 type KeyValueChangeUnit struct {
 	Path  string `json:"path_on_change"`
 	Value string `json:"value"`
@@ -160,162 +46,120 @@ type KeyValueChanges struct {
 	Deletion     *[]KeyValueChangeUnit `json:"deletion,omitempty"`
 }
 
-//// store a map of last key-value changes
+// store a map of last key-value changes
 var keyValueMaps = make(map[string](map[string]string))
 
-//// load storage config file from the path set by -config flag
-//func loadExtraConfig() *ExtraConfig {
+// NewStorage create new storage config
+func NewStorages(raw []interface{}, disc discovery.ServiceBackend) ([]*Storage, error) {
+	if raw == nil {
+		return []*Storage{}, nil
+	}
+	var storages []*Storage
+	if err := utils.DecodeRaw(raw, &storages); err != nil {
+		return nil, fmt.Errorf("storage configuration error: %v", err)
+	}
+	for _, s := range storages {
+		/* check whether path is empty */
+		if s.Path == "" {
+			return nil, fmt.Errorf("NewStorage[storage/keystore.go] storage must have a `path`")
+		}
+		/* add workspace prefix for path */
+		if strings.HasPrefix(s.Path, SLASH) {
+			s.Path = s.Path[1:]
+		}
+		/* parse onChange */
+		//		cmd, err := utils.ParseCommandArgs(s.OnChangeExec)
+		//		if err != nil {
+		//			return nil, fmt.Errorf("NewStorage[storage/keystore.go] could not parse `onChange` in storage %s: %s",
+		//				s.Path, err)
+		//		}
+		var cmd *commands.Command
+		if s.OnChangeExec != nil {
+			c, err := commands.NewCommand(s.OnChangeExec, s.Timeout)
+			if err != nil {
+				return nil, fmt.Errorf("Could not parse `onChange` in backend %s: %s",
+					s.Path, err)
+			}
+			cmd = c
+		}
 
-//	var discovery ExtraDiscoveryService
-//	discoveryCount := 0
+		/* if interval poll is too short, we stop it */
+		if s.Poll < 1 {
+			return nil, fmt.Errorf("NewStorages[storage/keystore.go] `poll` must be > 0 in storage %s",
+				s.Path)
+		}
+		s.onChangeCmd = cmd
+		s.discoveryService = disc
+	}
+	return storages, nil
+}
 
-//	extraConfigFlag := flag.Lookup("config").Value.String()
+// PollStop does nothing in a Storage
+func (s *Storage) PollStop() {
+	// Nothing to do
+}
 
-//	if extraConfigFlag == "" {
-//		extraConfigFlag = os.Getenv("CONTAINERBUDDY")
-//	}
+// PollTime implements Pollable for Storage
+// It returns the backend's poll interval.
+func (s Storage) PollTime() time.Duration {
+	return time.Duration(s.Poll) * time.Second
+}
 
-//	config, err := parseExtraConfig(extraConfigFlag)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
+// PollAction implements Pollable for Storage.
+// If the values in the path have changed since the last run,
+// we fire the on change handler.
+func (s *Storage) PollAction() {
+	log.Debugln("PollAction[storage/keystore.go] start.")
+	/* check if values in storage path has changed */
+	isChanged, changes := s.checkForKeyValueChanges(keyValueMaps[s.Path])
+	if isChanged {
+		if s.onChangeCmd != nil {
+			log.Infof("PollAction[storage/keystore.go] Triggering onChange cmd: %v", s.onChangeCmd.Args)
+			/* run on-change cmd */
+			s.onChange()
+		}
+		if s.OnChangePostUrl != "" {
+			log.Infof("PollAction[storage/keystore.go] Posting changes to specfied url: %v", s.OnChangePostUrl)
+			/* post changes to specified url*/
+			s.postKeyValuePairsOnChange(changes)
+		}
+	}
+}
 
-//	for _, discoveryBackend := range []string{"Consul"} {
-//		switch discoveryBackend {
-//		case "Consul":
-//			if config.Consul != "" {
-//				config.Consul = os.ExpandEnv(config.Consul)
-//				fmt.Printf("Consul value is:  %s\n", config.Consul)
-//				discovery = NewConsulConfig(config.Consul)
-//				discoveryCount += 1
-//			}
-//		}
-//	}
-
-//	if discoveryCount == 0 {
-//		log.Fatal("No discovery backend defined")
-//	} else if discoveryCount > 1 {
-//		log.Fatal("More than one discovery backend defined")
-//	}
-
-//	for _, storage := range config.Storages {
-//		storage.Path = os.ExpandEnv(storage.Path)
-
-//		//storage.onChangeArgs = strings.Split(storage.OnChangeExec, " ")
-//		cmd, _ := parseCommandArgs(storage.OnChangeExec)
-
-//		fmt.Printf("StoragePath=%s\n", storage.Path)
-
-//		fmt.Printf("onChangeExec=%s\n", cmd)
-
-//		storage.discoveryService = discovery
-
-//		storage.onChangeCmd = cmd
-//	}
-
-//	return config
-
-//}
-
-//// parse a config file to Go Struct
-//func parseExtraConfig(configFlag string) (*ExtraConfig, error) {
-//	if configFlag == "" {
-//		log.Fatal("-config flag is required.")
-//	}
-
-//	var data []byte
-//	if strings.HasPrefix(configFlag, "file://") {
-//		var err error
-//		if data, err = ioutil.ReadFile(strings.SplitAfter(configFlag, "file://")[1]); err != nil {
-//			log.Fatalf("Could not read config file: %s", err)
-//		}
-//	} else {
-//		data = []byte(configFlag)
-//	}
-
-//	//	config := &ExtraConfig{}
-
-//	//	if err := json.Unmarshal(data, &config); err != nil {
-//	//		log.Fatalf("Could not parse configuration: %s", err)
-//	//	}
-
-//	//	return config
-//	template, err := ApplyTemplate(data)
-//	if err != nil {
-//		return nil, fmt.Errorf(
-//			"Could not apply template to config: %s", err)
-//	}
-//	return unmarshalExtraConfig(template)
-//}
-
-//// Implements `pollingFunc`; args are the executable we use to check the
-//// application KV change. If the error code on that exectable is
-//// 0, we write a TTL health check to the health check store.
-//func checkForKvChange(pollable Pollable) {
-//	storage := pollable.(*StorageConfig) // if we pass a bad type here we crash intentionally
-//	if storage.CheckForKeyValueChanges() {
-//		run(storage.onChangeCmd)
-//	}
-//}
-
-//func (s StorageConfig) PollTime() int {
-//	return s.Poll
-//}
-
-//func (s *StorageConfig) CheckForKeyValueChanges() bool {
-//	return s.discoveryService.CheckForKeyValueChanges(keyValueMaps[s.Path], s)
-//}
-
-//func (s *StorageConfig) initialKeyValueUpdate() {
-//	s.discoveryService.InitSyncKeyValues(s)
-//}
-
-//// first time use only, sync key-value pairs from Consul to local
-//func (c Consul) InitSyncKeyValues(storage *StorageConfig) {
-//	kv := c.KV()
-//	if lists, _, err := kv.List(storage.Path, nil); err != nil {
-//		log.Println("Found Error - init sync keystore:")
-//		log.Println(err)
-
-//	} else {
-//		log.Printf("Initial Sync KeyValues Under Path %s...\n", storage.Path)
-
-//		var new_kv_map = make(map[string]string)
-//		for _, p := range lists {
-//			new_kv_map[p.Key] = string(p.Value[:])
-//		}
-//		keyValueMaps[storage.Path] = new_kv_map
-//	}
-
-//}
-
-//// compare key-value pairs from Consul to those from last time
-//// if there is changes, it will trigger function PostKeyValuePairsOnChange and
-//// return true
-func (storage *Storage) CheckForKeyValueChanges(old_kv_map map[string]string) bool {
-
-	c := storage.consul
-
+// checkForKeyValueChanges compares key-value pairs from Consul to those from last time
+// if there is changes, it will trigger function PostKeyValuePairsOnChange and
+// return true
+func (s *Storage) checkForKeyValueChanges(old_kv_map map[string]string) (bool, *KeyValueChanges) {
+	/* get consul client */
+	var c consulAPI.Client
+	if consulCli, ok := s.discoveryService.GetClient().(consulAPI.Client); !ok {
+		log.Error("[keystore.go]: Cannot get Consul Client")
+	} else {
+		c = consulCli
+	}
+	/* get consul ket values */
 	kv := c.KV()
 
-	log.Warnf("Checking Key-Value Pair Changes Under Path \n%s\n", storage.Path)
+	log.Debugf("checkForKeyValueChanges[storage/keystore.go] Checking changes under path: %s\n", s.Path)
 
-	if lists, _, err := kv.List(storage.Path, nil); err != nil {
-		log.Println("Found Error - check keystore update:")
-		log.Println(err)
-		return false
-
+	/* get all key values under the path by consul api */
+	if lists, _, e := kv.List(s.Path, nil); e != nil {
+		log.Errorf("checkForKeyValueChanges[storage/keystore.go] Cannot get key store updates from Consul: %v\n", e.Error())
+		return false, nil
 	} else {
-
+		/* create 3 list representing additions, deletions, modifications of key-store changes */
 		adds := make([]KeyValueChangeUnit, 0)
 		dels := make([]KeyValueChangeUnit, 0)
 		mods := make([]KeyValueChangeUnit, 0)
 
-		chgs := &KeyValueChanges{Root: storage.Path, Addition: &adds, Modification: &mods, Deletion: &dels}
+		/* create KeyValueChanges struct */
+		chgs := &KeyValueChanges{Root: s.Path, Addition: &adds, Modification: &mods, Deletion: &dels}
 
+		/* create new key-value map */
 		var new_kv_map = make(map[string]string)
 
-		// loop new pairs
+		/* loop key value pairs that fetch from consul
+		and generate new key-value map */
 		for _, p := range lists {
 			valnew := string(p.Value[:])
 			_, oke := old_kv_map[p.Key]
@@ -342,76 +186,106 @@ func (storage *Storage) CheckForKeyValueChanges(old_kv_map map[string]string) bo
 			dels = append(dels, KeyValueChangeUnit{Path: k, Value: ""})
 		}
 
-		keyValueMaps[storage.Path] = new_kv_map
+		keyValueMaps[s.Path] = new_kv_map
 		if len(adds) == 0 && len(dels) == 0 && len(mods) == 0 {
-			log.Warnf("No key-value pair(s) Changed Under Path %s...\n", storage.Path)
-			return false
+			log.Debugf("checkForKeyValueChanges[storage/keystore.go] No changes under path: %s\n", s.Path)
+			return false, nil
 		} else {
-			log.Warnf("Detect key-value pair(s) Changed Under Path %s...\n", storage.Path)
-			PostKeyValuePairsOnChange(storage.OnChangePostUrl, chgs)
-			return true
+			log.Infof("checkForKeyValueChanges[storage/keystore.go] Detect changes under path: %s\n", s.Path)
+			return true, chgs
 		}
 	}
 }
 
-////// post changes of keu-value pair in form of json to certain url
-func PostKeyValuePairsOnChange(url string, chgs *KeyValueChanges) {
-	if strings.Trim(url, " ") != "" {
+//postKeyValuePairsOnChange posts changes of keu-value pair in form of json to certain url
+func (storage *Storage) postKeyValuePairsOnChange(chgs *KeyValueChanges) {
+	url := strings.Trim(storage.OnChangePostUrl, " ")
+	/* if url is empty, do not post anything */
+	if url == "" {
+		log.Errorln("postKeyValuePairsOnChange[storage/keystore.go] Error: url is empty.")
+		return
+	}
+	/* convert changes to json format */
+	jsonStr, e := json.Marshal(chgs)
+	if e != nil {
+		log.Errorf("postKeyValuePairsOnChange[storage/keystore.go] Found error whilie building json: %v", e)
+		return
+	}
 
-		log.Warnf("Posting changes in key-value pair(s) to url: %s...\n", url)
+	log.Debugf("postKeyValuePairsOnChange[storage/keystore.go] Changes in json format:%v\n", string(jsonStr))
+	req, e := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+	if e != nil {
+		log.Errorf("postKeyValuePairsOnChange[storage/keystore.go] Found eroor while making post request: %v\n", e)
+		return
+	}
 
-		if jsonStr, err := json.Marshal(chgs); err != nil {
-			log.Println("Found Error While Building JSON:")
-			fmt.Println(err)
-		} else {
+	/* set response data type to json */
+	req.Header.Set("Content-Type", "application/json")
 
-			//bytes.NewBuffer(jsonStr)
-			log.Printf("Posting Json:%v\n", string(jsonStr[:]))
-			if req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr)); err != nil {
-				log.Println("Found Error Making Post Request:")
-				log.Println(err)
-			} else {
-
-				//req.Header.Set("X-Custom-Header", "myvalue")
-				req.Header.Set("Content-Type", "application/json")
-
-				client := &http.Client{}
-				if resp, err := client.Do(req); err != nil {
-					log.Println("Found Error:")
-					log.Println(err)
-				} else {
-					defer resp.Body.Close()
-					log.Printf("response Status:%v\n", resp.Status)
-					log.Printf("response Headers:%v\n", resp.Header)
-					body, _ := ioutil.ReadAll(resp.Body)
-					log.Printf("response Body:%v\n", string(body))
-				}
-
-			}
-		}
+	client := &http.Client{}
+	if resp, e := client.Do(req); e != nil {
+		log.Errorf("postKeyValuePairsOnChange[storage/keystore.go] Found eroor: %v\n", e)
 	} else {
-		log.Printf("No Url to Post.\n")
+		defer resp.Body.Close()
+		log.Infof("postKeyValuePairsOnChange[storage/keystore.go] Response Status:%v\n", resp.Status)
 	}
 }
 
-// OnChange runs the backend's onChange command, returning the results
-func (s *Storage) OnChange() error {
+// OnChange runs the storage's onChange command, returning the results
+func (s *Storage) onChange() error {
 
 	return commands.RunWithTimeout(s.onChangeCmd, log.Fields{
 		"process": "onChange", "Path": s.Path})
 
 }
 
-//func unmarshalExtraConfig(data []byte) (*ExtraConfig, error) {
-//	extraConfig := &ExtraConfig{}
-//	if err := json.Unmarshal(data, &extraConfig); err != nil {
-//		syntax, ok := err.(*json.SyntaxError)
-//		if !ok {
-//			return nil, fmt.Errorf(
-//				"Could not parse configuration: %s",
-//				err)
-//		}
-//		return nil, newJSONParseError(data, syntax)
-//	}
-//	return extraConfig, nil
-//}
+// CreateDefaultFoldersAndLinks create two folders 'log' and 'data' under /log
+// And link '/log' and '/data' to them respectively.
+func CreateDefaultFoldersAndLinks() {
+	/*
+		mkdir -p /tmp/log
+		mkdir -p /tmp/data
+		ln -snf /tmp/log /log
+		ln -snf /tmp/data /data
+	*/
+
+	c1 := exec.Command("mkdir", "-p", "/tmp/log")
+	if e := c1.Start(); e != nil {
+		log.Fatal(e)
+	}
+	log.Infof("CreateDefaultFoldersAndLinks[storage/keystore.go] Waiting for command to finish: %v %v\n", c1.Path, c1.Args)
+	if e := c1.Wait(); e != nil {
+		log.Printf("Command finished with error: %v", e)
+	}
+	log.Infof("CreateDefaultFoldersAndLinks[storage/keystore.go] Successfully executed cmd: %v %v\n", c1.Path, c1.Args)
+
+	c2 := exec.Command("mkdir", "-p", "/tmp/data")
+	if e := c2.Start(); e != nil {
+		log.Fatal(e)
+	}
+	log.Infof("CreateDefaultFoldersAndLinks[storage/keystore.go] Waiting for command to finish: %v %v\n", c2.Path, c2.Args)
+	if e := c2.Wait(); e != nil {
+		log.Printf("Command finished with error: %v", e)
+	}
+	log.Infof("CreateDefaultFoldersAndLinks[storage/keystore.go] Successfully executed cmd: %v %v\n", c2.Path, c2.Args)
+
+	c3 := exec.Command("ln", "-snf", "/tmp/log", "/log")
+	if e := c3.Start(); e != nil {
+		log.Fatal(e)
+	}
+	log.Infof("CreateDefaultFoldersAndLinks[storage/keystore.go] Waiting for command to finish: %v %v\n", c3.Path, c3.Args)
+	log.Infof("CreateDefaultFoldersAndLinks[storage/keystore.go] Successfully executed cmd: %v %v\n", c3.Path, c3.Args)
+	if e := c3.Wait(); e != nil {
+		log.Printf("Command finished with error: %v", e)
+	}
+
+	c4 := exec.Command("ln", "-snf", "/tmp/data", "/data")
+	if e := c4.Start(); e != nil {
+		log.Fatal(e)
+	}
+	log.Infof("CreateDefaultFoldersAndLinks[storage/keystore.go] Waiting for command to finish: %v %v\n", c4.Path, c4.Args)
+	log.Infof("CreateDefaultFoldersAndLinks[storage/keystore.go] Successfully executed cmd: %v %v\n", c4.Path, c4.Args)
+	if e := c4.Wait(); e != nil {
+		log.Printf("Command finished with error: %v", e)
+	}
+}

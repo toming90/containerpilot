@@ -87,6 +87,11 @@ func NewEtcdConfig(raw interface{}) (*Etcd, error) {
 	return etcd, nil
 }
 
+// GetClient returns etcd client
+func (c *Etcd) GetClient() interface{} {
+	return c.Client
+}
+
 // Deregister removes this instance from the registry
 func (c *Etcd) Deregister(service *discovery.ServiceDefinition) {
 	c.deregisterService(service)
