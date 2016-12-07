@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 
@@ -65,19 +66,32 @@ func parseServiceBackend(rawCfg map[string]interface{}) (discovery.ServiceBacken
 	var discoveryService discovery.ServiceBackend
 	var err error
 	discoveryCount := 0
-	for _, key := range discovery.GetBackends() {
-		handler := discovery.GetConfigHook(key)
+
+	if os.Getenv("HOST_IP") != "" {
+		handler := discovery.GetConfigHook("consul")
 		if handler != nil {
-			if rawCfg, ok := rawCfg[key]; ok {
-				discoveryService, err = handler(rawCfg)
-				if err != nil {
-					return nil, err
-				}
-				discoveryCount++
+			discoveryService, err = handler(os.Getenv("HOST_IP") + ":8500")
+			if err != nil {
+				return nil, err
 			}
-			delete(rawCfg, key)
+			discoveryCount++
+		}
+	} else {
+		for _, key := range discovery.GetBackends() {
+			handler := discovery.GetConfigHook(key)
+			if handler != nil {
+				if rawCfg, ok := rawCfg[key]; ok {
+					discoveryService, err = handler(rawCfg)
+					if err != nil {
+						return nil, err
+					}
+					discoveryCount++
+				}
+				delete(rawCfg, key)
+			}
 		}
 	}
+
 	if discoveryCount == 0 {
 		return nil, errors.New("No discovery backend defined")
 	} else if discoveryCount > 1 {

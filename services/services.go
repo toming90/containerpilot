@@ -95,6 +95,29 @@ func parseService(s *Service, disc discovery.ServiceBackend) error {
 		return ifaceErr
 	}
 
+	//CUSTMIZE - get host ip and external port from env
+	// if intefaces contains 'cobalt_web'
+	for _, inteface := range interfaces {
+		if inteface == "cobalt_web" {
+			// call docker api to get inspect,
+			// from inspect we get port mappings,
+			// in this order: http, udp
+			hostIP, port, e := utils.GetInterfaceCobaltWeb(s.Port)
+			if e == nil {
+				log.Debugf("parseService[services/services.go] find external port: %v:%v", hostIP, port)
+				s.definition = &discovery.ServiceDefinition{
+					ID:        s.ID,
+					Name:      s.Name,
+					Port:      port,
+					TTL:       s.TTL,
+					Tags:      s.Tags,
+					IPAddress: hostIP,
+				}
+				return nil
+			}
+		}
+	}
+
 	ipAddress, err := utils.GetIP(interfaces)
 	if err != nil {
 		return err

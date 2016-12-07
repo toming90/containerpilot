@@ -12,12 +12,11 @@ import (
 	_ "github.com/toming90/containerpilot/discovery/etcd"
 )
 
-func init() {
-	log.SetLevel(log.DebugLevel)
-}
-
 // Main executes the containerpilot CLI
 func main() {
+	// CUSTOMIZE - set log level
+	log.SetLevel(log.DebugLevel)
+
 	// make sure we use only a single CPU so as not to cause
 	// contention on the main application
 	runtime.GOMAXPROCS(1)
