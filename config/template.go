@@ -6,6 +6,10 @@ import (
 	"os"
 	"strings"
 	"text/template"
+
+	log "github.com/Sirupsen/logrus"
+
+	"github.com/toming90/containerpilot/utils"
 )
 
 // Environment is a map of environment variables to their values
@@ -20,6 +24,49 @@ func parseEnvironment(environ []string) Environment {
 		kv := strings.Split(e, "=")
 		env[kv[0]] = kv[1]
 	}
+
+	//CUSTOMIZE
+	//getting the ip in this order: nomad_addr,consul_ip(pass in), nomad_ip(pass_in), then getIP eth0.
+	var hostAddress string
+	var hostIP string
+
+	hostAddress = os.Getenv("NOMAD_ADDR_cobalt")
+
+	//it not triggered by NOMAD
+	if "" == hostAddress {
+		hostAddress = os.Getenv("CONSUL_IP")
+		hostIP = hostAddress
+
+	}
+	//Try one more time.
+	if "" == hostAddress {
+		hostAddress = os.Getenv("NOMAD_IP")
+		hostIP = hostAddress
+
+	}
+
+	//last resort getting from interface.
+	if "" == hostAddress {
+		if ipAddress, err := utils.GetIP([]string{"eth0"}); err != nil {
+			hostIP = ipAddress
+			hostAddress = hostIP
+		}
+	}
+
+	if "" != hostAddress && "" == hostIP {
+		hostIP = strings.Split(hostAddress, ":")[0]
+	}
+
+	log.Debugf("setting env host ip: %v", hostIP)
+	// finnaly, set host ip
+	if "" != hostIP {
+		env["HOST_IP"] = hostIP
+		os.Setenv("HOST_IP", hostIP)
+		log.Debugf("parseEnvironment: set HOST_IP %v", hostIP)
+	} else {
+		log.Error("parseEnvironment: cannot get HOST_IP")
+	}
+
 	return env
 }
 

@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 // HandleSignals listens for and captures signals used for orchestration
@@ -14,10 +16,13 @@ func (a *App) handleSignals() {
 		for signal := range sig {
 			switch signal {
 			case syscall.SIGUSR1:
+				log.Infof("Container is in maintenance because of: %v", signal)
 				a.ToggleMaintenanceMode()
 			case syscall.SIGTERM:
+				log.Infof("Container is terminated because of: %v", signal)
 				a.Terminate()
 			case syscall.SIGHUP:
+				log.Infof("Container is starting because of: %v", signal)
 				a.Reload()
 			}
 		}
